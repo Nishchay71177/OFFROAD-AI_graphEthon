@@ -140,3 +140,36 @@ margin-top:10px;
 font-size:18px;
 
 }
+
+/* Live Video Styles */
+#liveVideo {
+  background: black;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+}
+
+#liveVideoContainer video {
+  display: block;
+  margin: 0 auto;
+}
+
+#liveFrameCapture,
+#liveMaskCapture {
+  min-height: 300px;
+  object-fit: contain;
+}
+
+#liveTerrainType,
+#liveConfidence,
+#liveDecision {
+  font-size: 16px;
+  margin: 8px 0;
+  padding: 8px;
+  background: rgba(56, 189, 248, 0.1);
+  border-left: 3px solid #38bdf8;
+  border-radius: 4px;
+}
+
+#liveFrameCount {
+  text-align: center;
+  font-style: italic;
+}

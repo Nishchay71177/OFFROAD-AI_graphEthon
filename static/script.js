@@ -260,3 +260,185 @@ async function predictVideo() {
       "❌ Error: " + error.message + ". Check browser console (F12) for details."
   }
 }
+
+// ============= LIVE VIDEO ANALYSIS =============
+
+let liveStream = null
+let analysisRunning = false
+let frameCount = 0
+
+async function startLiveAnalysis() {
+  try {
+    // Check if browser supports camera access
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error("Your browser does not support camera access. Use HTTPS or localhost instead.")
+    }
+    
+    console.log("Requesting camera access...")
+    
+    // Show permission request alert
+    const userConfirmed = confirm("📷 Allow camera access?\n\nYour browser will request permission to use your webcam for live terrain analysis.")
+    
+    if (!userConfirmed) {
+      console.log("Camera access denied by user")
+      return
+    }
+    
+    // Request camera access
+    liveStream = await navigator.mediaDevices.getUserMedia({
+      video: { 
+        width: { ideal: 640 }, 
+        height: { ideal: 480 }
+      },
+      audio: false
+    })
+    
+    console.log("Camera access granted!")
+    
+    // Display video element
+    const videoElement = document.getElementById("liveVideo")
+    videoElement.srcObject = liveStream
+    
+    // Wait for video to load
+    await new Promise(resolve => {
+      videoElement.onloadedmetadata = resolve
+    })
+    
+    document.getElementById("liveVideoContainer").style.display = "block"
+    document.getElementById("liveResultsContainer").style.display = "block"
+    
+    // Update button visibility
+    document.getElementById("startBtn").style.display = "none"
+    document.getElementById("stopBtn").style.display = "inline-block"
+    
+    // Start analysis loop
+    analysisRunning = true
+    frameCount = 0
+    console.log("Starting live analysis loop...")
+    analysisLoop()
+    
+  } catch (error) {
+    console.error("Camera access error:", error)
+    
+    let errorMessage = "❌ Cannot access camera.\n\n"
+    
+    if (error.message.includes("HTTPS") || error.message.includes("localhost")) {
+      errorMessage += "⚠️ HTTPS Required!\n\n"
+      errorMessage += "Camera access requires:\n"
+      errorMessage += "• HTTPS connection (secure), OR\n"
+      errorMessage += "• localhost/127.0.0.1\n\n"
+      errorMessage += "Current: " + window.location.href
+    } else if (error.name === 'NotAllowedError') {
+      errorMessage += "Camera permission was denied.\n\n"
+      errorMessage += "Enable camera access in browser settings."
+    } else if (error.name === 'NotFoundError') {
+      errorMessage += "No camera device found on this computer."
+    } else if (error.name === 'NotReadableError') {
+      errorMessage += "Camera is already in use by another application."
+    } else {
+      errorMessage += error.message
+    }
+    
+    alert(errorMessage)
+  }
+}
+
+function stopLiveAnalysis() {
+  console.log("Stopping live analysis...")
+  
+  // Stop the stream
+  analysisRunning = false
+  if (liveStream) {
+    liveStream.getTracks().forEach(track => track.stop())
+    liveStream = null
+  }
+  
+  // Hide video element
+  document.getElementById("liveVideoContainer").style.display = "none"
+  document.getElementById("liveResultsContainer").style.display = "none"
+  
+  // Update button visibility
+  document.getElementById("startBtn").style.display = "inline-block"
+  document.getElementById("stopBtn").style.display = "none"
+  
+  // Clear results
+  document.getElementById("liveTerrainType").innerHTML = ""
+  document.getElementById("liveConfidence").innerHTML = ""
+  document.getElementById("liveDecision").innerHTML = ""
+  document.getElementById("liveFrameCount").innerHTML = ""
+}
+
+async function analysisLoop() {
+  if (!analysisRunning) return
+  
+  try {
+    const videoElement = document.getElementById("liveVideo")
+    
+    // Capture frame from video
+    const canvas = document.createElement('canvas')
+    canvas.width = videoElement.videoWidth
+    canvas.height = videoElement.videoHeight
+    
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(videoElement, 0, 0)
+    
+    // Convert canvas to blob
+    canvas.toBlob(async (blob) => {
+      try {
+        // Create form data and send to backend
+        const formData = new FormData()
+        formData.append("file", blob, "frame.jpg")
+        
+        const res = await fetch("/predict-image", {
+          method: "POST",
+          body: formData
+        })
+        
+        if (!res.ok) throw new Error("Analysis failed")
+        
+        const data = await res.json()
+        frameCount++
+        
+        console.log(`Live Frame ${frameCount}:`, data)
+        
+        // Display results in real-time
+        document.getElementById("liveTerrainType").innerHTML = 
+          `<strong>Terrain:</strong> ${data.terrain}`
+        
+        document.getElementById("liveConfidence").innerHTML = 
+          `<strong>Confidence:</strong> ${data.confidence}%`
+        
+        document.getElementById("liveDecision").innerHTML = 
+          `<strong>Decision:</strong> ${data.decision}`
+        
+        document.getElementById("liveFrameCount").innerHTML = 
+          `Frames analyzed: ${frameCount}`
+        
+        // Display captured frame
+        document.getElementById("liveFrameCapture").src = 
+          canvas.toDataURL('image/jpeg')
+        
+        // Display mask
+        document.getElementById("liveMaskCapture").src = 
+          "data:image/png;base64," + data.mask
+        
+        // Continue analysis loop (every 1.5 seconds)
+        if (analysisRunning) {
+          setTimeout(analysisLoop, 1500)
+        }
+        
+      } catch (error) {
+        console.error("Error in analysis loop:", error)
+        if (analysisRunning) {
+          setTimeout(analysisLoop, 1500)
+        }
+      }
+    }, 'image/jpeg', 0.8)
+    
+  } catch (error) {
+    console.error("Frame capture error:", error)
+    if (analysisRunning) {
+      setTimeout(analysisLoop, 1500)
+    }
+  }
+}
