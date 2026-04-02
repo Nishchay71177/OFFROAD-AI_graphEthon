@@ -1,91 +1,112 @@
 <!DOCTYPE html>
-<html lang="en">
+
+<html>
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Offroad AI - Terrain Segmentation</title>
-    <link rel="stylesheet" href="/static/style.css">
+
+<title>Offroad AI</title>
+
+<link rel="stylesheet" href="/static/style.css">
+
 </head>
+
 <body>
-    <div class="container">
-        <!-- Header -->
-        <header class="header">
-            <h1>🚙 Offroad Navigation Intelligence</h1>
-            <p class="subtitle">AI-powered terrain segmentation for autonomous vehicles</p>
-        </header>
 
-        <!-- Main Content -->
-        <main class="main-content">
-            <!-- Upload Section -->
-            <section class="glass upload-section">
-                <h2>Upload Terrain Image</h2>
-                <div class="drop-zone" id="dropZone">
-                    <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path>
-                    </svg>
-                    <p class="drop-text">Drag & drop your image here</p>
-                    <p class="drop-subtext">or</p>
-                    <input type="file" id="fileInput" accept="image/*">
-                    <button class="btn-browse">Browse Files</button>
-                </div>
-            </section>
+<h1>Offroad Navigation Intelligence</h1>
 
-            <!-- Preview Section -->
-            <section class="glass results-section" id="resultsSection" style="display: none;">
-                <div class="results-grid">
-                    <div class="result-card">
-                        <h3>Input Image</h3>
-                        <img id="preview" alt="Input image">
-                    </div>
-                    <div class="result-card">
-                        <h3>Segmentation Mask</h3>
-                        <img id="maskPreview" alt="Segmentation mask">
-                    </div>
-                </div>
-            </section>
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('image')">Image Analysis</button>
+  <button class="tab-btn" onclick="switchTab('video')">Video Analysis</button>
+</div>
 
-            <!-- Analysis Results -->
-            <section class="glass metrics-section" id="metricsSection" style="display: none;">
-                <div class="metrics-grid">
-                    <div class="metric-card terrain-card">
-                        <h4>Terrain Type</h4>
-                        <p id="terrain" class="metric-value">--</p>
-                    </div>
-                    <div class="metric-card confidence-card">
-                        <h4>Confidence</h4>
-                        <p id="confidence" class="metric-value">--</p>
-                    </div>
-                    <div class="metric-card decision-card">
-                        <h4>Navigation Decision</h4>
-                        <p id="decision" class="metric-value">--</p>
-                    </div>
-                </div>
-            </section>
+<div id="image-tab" class="tab-content active">
+<div class="glass">
 
-            <!-- Analyze Button -->
-            <div class="button-container">
-                <button id="analyzeBtn" class="btn-primary" onclick="predict()" style="display: none;">
-                    <span>Analyze Terrain</span>
-                    <span class="spinner" id="spinner" style="display: none;"></span>
-                </button>
-            </div>
+<h2>Upload Terrain Image</h2>
 
-            <!-- Error Message -->
-            <div class="error-box" id="errorBox" style="display: none;"></div>
+<div class="drop-zone" id="dropZone">
 
-            <!-- Loading State -->
-            <div class="loading-state" id="loadingState" style="display: none;">
-                <div class="spinner-large"></div>
-                <p>Processing image...</p>
-            </div>
-        </main>
+<p>Drag & Drop Image</p>
 
-        <!-- Footer -->
-        <footer class="footer">
-            <p>🤖 Powered by PyTorch | U-Net + ResNet18 Architecture</p>
-        </footer>
-    </div>
+<input type="file" id="fileInput" accept="image/*">
 
-    <script src="/static/script.js"></script>
+</div>
+
+<button onclick="predictImage()">Analyze Terrain</button>
+
+</div>
+
+
+<div class="glass results">
+
+<div>
+
+<h3>Input Image</h3>
+
+<img id="preview">
+
+</div>
+
+<div>
+
+<h3>Segmentation Mask</h3>
+
+<img id="maskPreview">
+
+</div>
+
+</div>
+
+
+<div class="glass metrics">
+
+<p id="terrain"></p>
+
+<p id="confidence"></p>
+
+<p id="decision"></p>
+
+</div>
+</div>
+
+<div id="video-tab" class="tab-content">
+<div class="glass">
+
+<h2>Upload Terrain Video</h2>
+
+<div class="drop-zone" id="dropZoneVideo">
+
+<p>Drag & Drop Video</p>
+
+<input type="file" id="fileInputVideo" accept="video/*">
+
+</div>
+
+<button onclick="predictVideo()">Analyze Video</button>
+
+<p id="videoInfo"></p>
+
+</div>
+
+<div class="glass results" id="videoResultsContainer" style="display:none;">
+
+<h3>Video Analysis Results</h3>
+
+<div id="videoFramesResults" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(350px, 1fr)); gap:20px;"></div>
+
+</div>
+
+<div class="glass metrics">
+
+<p id="videoDecisions"></p>
+
+<p id="videoFinalDecision"></p>
+
+</div>
+</div>
+
+<script src="/static/script.js"></script>
+
 </body>
+
 </html>
