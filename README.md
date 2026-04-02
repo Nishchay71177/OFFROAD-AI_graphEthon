@@ -2,9 +2,7 @@
 [![Live Demo](https://img.shields.io/badge/Live-Demo-blue?style=for-the-badge)](https://mishraji55.github.io/OFFROAD-AI_graphEthon/)
 
 ---
-title: Semantic Segmentation Demo
-sdk: streamlit
-app_file: app.py
+title: Semantic Segmentation 
 ---
 
 # Offroad Semantic Scene Segmentation - Research Website
@@ -24,7 +22,7 @@ This website presents a comprehensive showcase of cutting-edge research in seman
 ## 📁 Project Structure
 
 ```
-codezen/
+GraphEthon/
 ├── index.html          # Main website markup (semantic HTML5)
 ├── styles.css          # Complete styling with responsive design
 ├── script.js           # Interactive features and animations
@@ -191,13 +189,13 @@ To improve this website:
 **Project**: Offroad Semantic Scene Segmentation Using Synthetic Desert Data
 
 **Team Members:**
-- Nischay  
-- shaurya  
-- yash 
-- Sahil
+- Nischay garg 
+- shaurya goyal 
+- Riya Mittal
+- Sahil Mishra
    
 
-**Deployed Link**: [Live Demo](https://mishraji55.github.io/CODEZEN-offroadGuide/)
+**Deployed Link**: [Live Demo]()
 
 
 

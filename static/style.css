@@ -1,0 +1,107 @@
+body{
+
+background: linear-gradient(135deg,#020617,#0f172a);
+
+font-family: system-ui;
+
+color:white;
+
+text-align:center;
+
+padding:40px;
+
+}
+
+h1{
+
+margin-bottom:30px;
+
+}
+
+.glass{
+
+background: rgba(255,255,255,0.08);
+
+backdrop-filter: blur(12px);
+
+padding:25px;
+
+border-radius:16px;
+
+margin:20px auto;
+
+width:70%;
+
+box-shadow:0 8px 32px rgba(0,0,0,0.3);
+
+}
+
+.drop-zone{
+
+border:2px dashed #38bdf8;
+
+padding:40px;
+
+border-radius:12px;
+
+cursor:pointer;
+
+}
+
+.drop-zone:hover{
+
+background: rgba(56,189,248,0.1);
+
+}
+
+input{
+
+display:none;
+
+}
+
+button{
+
+background:#22c55e;
+
+padding:12px 25px;
+
+border:none;
+
+border-radius:10px;
+
+color:white;
+
+font-size:16px;
+
+cursor:pointer;
+
+margin-top:15px;
+
+}
+
+.results{
+
+display:flex;
+
+justify-content:space-around;
+
+flex-wrap:wrap;
+
+}
+
+.results img{
+
+width:300px;
+
+border-radius:10px;
+
+margin-top:10px;
+
+}
+
+.metrics{
+
+font-size:18px;
+
+}

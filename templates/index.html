@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<title>Offroad AI</title>
+
+<link rel="stylesheet" href="/static/style.css">
+
+</head>
+
+<body>
+
+<h1>🚙 Offroad Navigation Intelligence</h1>
+
+<div class="glass">
+
+<h2>Upload Terrain Image</h2>
+
+<div class="drop-zone" id="dropZone">
+
+<p>Drag & Drop Image</p>
+
+<input type="file" id="fileInput">
+
+</div>
+
+<button onclick="predict()">Analyze Terrain</button>
+
+</div>
+
+
+<div class="glass results">
+
+<div>
+
+<h3>Input Image</h3>
+
+<img id="preview">
+
+</div>
+
+<div>
+
+<h3>Segmentation Mask</h3>
+
+<img id="maskPreview">
+
+</div>
+
+</div>
+
+
+<div class="glass metrics">
+
+<p id="terrain"></p>
+
+<p id="confidence"></p>
+
+<p id="decision"></p>
+
+</div>
+
+
+<script src="/static/script.js"></script>
+
+</body>
+
+</html>
