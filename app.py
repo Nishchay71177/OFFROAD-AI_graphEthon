@@ -8,6 +8,7 @@ from PIL import Image
 import tempfile
 import io
 import base64
+import os
 
 from video import sample_video_frames
 
@@ -16,7 +17,7 @@ CORS(app)
 
 # ================= CONFIG =================
 
-CLASSES = ["Easy","Moderate","Rough","Very Rough"]
+CLASSES = ["Easy", "Moderate", "Rough", "Very Rough"]
 
 clf_tf = T.Compose([
     T.Resize((224,224)),
@@ -48,7 +49,10 @@ def load_classifier():
 
         clf_model = models.resnet18(weights=None)
 
-        clf_model.fc = torch.nn.Linear(clf_model.fc.in_features, 4)
+        clf_model.fc = torch.nn.Linear(
+            clf_model.fc.in_features,
+            4
+        )
 
         clf_model.load_state_dict(
             torch.load(
@@ -58,6 +62,8 @@ def load_classifier():
         )
 
         clf_model.eval()
+
+        print("Classifier loaded")
 
     return clf_model
 
@@ -73,7 +79,7 @@ def load_unet():
 
         unet_model = smp.Unet(
 
-            encoder_name="mobilenet_v2",  # very light
+            encoder_name="mobilenet_v2",
 
             encoder_weights="imagenet",
 
@@ -84,10 +90,13 @@ def load_unet():
 
         unet_model.eval()
 
+        print("UNet loaded")
+
     return unet_model
 
 
 # ================= CORE LOGIC =================
+
 
 def classify_terrain(img):
 
@@ -101,7 +110,7 @@ def classify_terrain(img):
 
         idx = torch.argmax(probs).item()
 
-    return CLASSES[idx], float(probs[idx]*100)
+    return CLASSES[idx], float(probs[idx] * 100)
 
 
 
@@ -127,33 +136,41 @@ def unet_segment(img):
 
 def split_zones(mask):
 
-    h,w = mask.shape
+    h, w = mask.shape
 
     return (
+
         mask[:, :w//3],
+
         mask[:, w//3:2*w//3],
+
         mask[:, 2*w//3:]
+
     )
 
 
 
 def free_ratio(zone):
 
-    return np.sum(zone==1) / zone.size
+    return np.sum(zone == 1) / zone.size
 
 
 
 def navigation_decision(mask, terrain_label):
 
-    left,front,right = split_zones(mask)
+    left, front, right = split_zones(mask)
 
-    lf,ff,rf = free_ratio(left),free_ratio(front),free_ratio(right)
+    lf = free_ratio(left)
+
+    ff = free_ratio(front)
+
+    rf = free_ratio(right)
 
     if terrain_label == "Very Rough":
 
         decision = "STOP"
 
-    elif ff < 0.3:
+    elif ff < 0.30:
 
         decision = "TURN LEFT" if lf > rf else "TURN RIGHT"
 
@@ -173,9 +190,17 @@ def home():
     return render_template("index.html")
 
 
+@app.route("/health")
+def health():
+
+    return jsonify({
+
+        "status": "running"
+
+    })
+
 
 @app.route("/predict-image", methods=["POST"])
-
 def predict_image():
 
     file = request.files["file"]
@@ -188,44 +213,57 @@ def predict_image():
 
     decision = navigation_decision(mask, terrain)
 
-    # convert mask to base64
+    # convert mask → base64 image
 
-    mask_img = Image.fromarray(mask*255)
+    mask_img = Image.fromarray(mask * 255)
 
     buffered = io.BytesIO()
 
     mask_img.save(buffered, format="PNG")
 
-    mask_base64 = base64.b64encode(buffered.getvalue()).decode()
+    mask_base64 = base64.b64encode(
+
+        buffered.getvalue()
+
+    ).decode()
 
     return jsonify({
 
         "terrain": terrain,
 
-        "confidence": round(conf,2),
+        "confidence": round(conf, 2),
 
         "decision": decision,
 
         "mask": mask_base64
+
     })
 
 
-
 @app.route("/predict-video", methods=["POST"])
-
 def predict_video():
-    # This endpoint is now optional - video processing is handled on client side
-    # Kept for backward compatibility
 
     file = request.files["file"]
 
-    temp = tempfile.NamedTemporaryFile(delete=False)
+    temp = tempfile.NamedTemporaryFile(
+
+        delete=False,
+
+        suffix=".mp4"
+
+    )
 
     file.save(temp.name)
 
-    video_data = sample_video_frames(temp.name)
-    
-    frames = video_data['frames']
+    video_data = sample_video_frames(
+
+        temp.name,
+
+        num_frames=5
+
+    )
+
+    frames = video_data["frames"]
 
     decisions = []
 
@@ -235,19 +273,60 @@ def predict_video():
 
         mask = unet_segment(frame)
 
-        decision = navigation_decision(mask, terrain)
-        
+        decision = navigation_decision(
+
+            mask,
+
+            terrain
+
+        )
+
         decisions.append(decision)
 
-    final_decision = max(set(decisions), key=decisions.count)
+    final_decision = max(
+
+        set(decisions),
+
+        key=decisions.count
+
+    )
 
     return jsonify({
 
         "decisions": decisions,
+
         "final_decision": final_decision
+
     })
+
+
+# ================= RUN SERVER =================
 
 
 if __name__ == "__main__":
 
-    app.run(host="0.0.0.0", port=10000)
+    PORT = int(
+
+        os.environ.get(
+
+            "PORT",
+
+            10000
+
+        )
+
+    )
+
+    # HTTPS enabled for live camera testing
+
+    app.run(
+
+        host="0.0.0.0",
+
+        port=PORT,
+
+        ssl_context="adhoc",
+
+        debug=True
+
+    )
