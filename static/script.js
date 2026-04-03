@@ -142,43 +142,66 @@ function extractVideoFrames(videoFile) {
 }
 
 async function predictVideo() {
-  const frames = await extractVideoFrames(videoFile)
-
-  let decisions = []
-  let html = ""
-
-  // 🔥 BATCH PROCESSING: Send all frames at once (much faster!)
-  const fd = new FormData()
-  for (let i = 0; i < frames.length; i++) {
-    fd.append("files", frames[i])
+  if (!videoFile) {
+    alert("Please select a video file first")
+    return
   }
 
-  document.getElementById("videoFramesResults").innerHTML = "<p>Processing all frames in batch...</p>"
+  let formData = new FormData()
+  formData.append("file", videoFile)
 
-  const res = await fetch("/predict-batch", {
-    method: "POST",
-    body: fd
-  })
+  document.getElementById("videoResultsContainer").style.display = "block"
+  document.getElementById("videoFramesResults").innerHTML = "<p style='text-align:center; padding:20px;'>Processing video...</p>"
+  document.getElementById("videoFinalDecision").innerHTML = ""
 
-  const data = await res.json()
-  const results = data.results
+  try {
+    const res = await fetch("/predict-video", {
+      method: "POST",
+      body: formData
+    })
 
-  for (let i = 0; i < results.length; i++) {
-    const result = results[i]
-    decisions.push(result.decision)
+    const data = await res.json()
 
-    html += `
-      <div>
-        <img src="data:image/png;base64,${result.mask}" width="100%">
-        <p>Terrain: ${result.terrain}</p>
-        <p>Decision: ${result.decision}</p>
+    if (!data.success) {
+      alert("Error: " + data.error)
+      return
+    }
+
+    // Display analysis results
+    let html = ""
+    if (data.frame_predictions && data.frame_predictions.length > 0) {
+      data.frame_predictions.forEach((frame, index) => {
+        html += `
+          <div style="border: 1px solid rgba(56,189,248,0.3); border-radius: 8px; padding: 15px; background: rgba(30,41,59,0.6);">
+            <h4 style="margin-top: 0; margin-bottom: 10px; color: #38bdf8;">Sample ${index + 1}</h4>
+            <p style="margin: 8px 0; font-size: 13px;"><strong>Terrain Type:</strong> ${frame.terrain}</p>
+            <p style="margin: 8px 0; font-size: 13px;"><strong>Recommendation:</strong> ${frame.decision}</p>
+            <p style="margin: 8px 0; font-size: 12px; color: #94a3b8; font-style: italic;">${frame.decision_description}</p>
+            <div style="margin-top: 10px;">
+              <p style="margin: 5px 0; font-size: 11px; color: #64748b;">Segmentation Mask:</p>
+              <img src="data:image/png;base64,${frame.mask}" style="width: 100%; border-radius: 6px; border: 1px solid rgba(56,189,248,0.2);">
+            </div>
+          </div>
+        `
+      })
+    }
+
+    document.getElementById("videoFramesResults").innerHTML = html
+
+    // Display final verdict
+    document.getElementById("videoFinalDecision").innerHTML = `
+      <div style="background: linear-gradient(135deg, rgba(34,197,94,0.1), rgba(56,189,248,0.1)); padding: 20px; border-radius: 8px; border-left: 4px solid #38bdf8; margin-top: 20px;">
+        <h3 style="margin-top: 0; margin-bottom: 15px; color: #38bdf8;">Video Analysis Summary</h3>
+        <p style="margin: 8px 0; font-size: 13px;">Most Critical Terrain: <strong>${data.final_terrain}</strong></p>
+        <div style="background: rgba(34,197,94,0.1); padding: 12px; border-radius: 6px; margin-top: 12px; border: 1px solid rgba(34,197,94,0.3);">
+          <p style="margin: 5px 0; font-size: 14px; font-weight: bold; color: #22c55e;">FINAL VERDICT: ${data.final_decision}</p>
+          <p style="margin: 8px 0; font-size: 12px; color: #86efac;">${data.final_decision_description}</p>
+        </div>
       </div>
     `
+  } catch (error) {
+    alert("Error processing video: " + error.message)
   }
-
-  document.getElementById("videoFramesResults").innerHTML = html
-  document.getElementById("videoFinalDecision").innerHTML =
-    "Final: " + decisions[0]
 }
 
 // ============= LIVE =============
