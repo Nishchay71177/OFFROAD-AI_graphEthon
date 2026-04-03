@@ -346,9 +346,10 @@ if __name__ == "__main__":
     # Preload models before starting server
     preload_models()
     
-    app.run(
-        host="0.0.0.0",
-        port=10000,
-        ssl_context="adhoc",   # 🔥 needed for camera
-        debug=False  # 🔥 Disabled debug for better performance
-    )
+    import os
+
+app.run(
+    host="0.0.0.0",
+    port=int(os.environ.get("PORT", 10000)),
+    debug=False
+)
