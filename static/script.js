@@ -1,6 +1,19 @@
 // ================ WEBSOCKET CONNECTION ================
 
-const socket = io();
+// Determine protocol based on current page
+const protocol = window.location.protocol === 'https:' ? 'https' : 'http';
+const socketURL = `${protocol}://${window.location.host}`;
+
+const socket = io(socketURL, {
+    reconnection: true,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+    reconnectionAttempts: 10,
+    forceNew: false,
+    secure: window.location.protocol === 'https:',
+    rejectUnauthorized: false
+});
+
 let isConnected = false;
 let isStreamingActive = false;
 
@@ -10,10 +23,23 @@ socket.on('connect', () => {
     console.log('✅ Connected to server');
 });
 
+socket.on('connect_response', (data) => {
+    console.log('✅ Server response:', data.status);
+});
+
 socket.on('disconnect', () => {
     isConnected = false;
     updateConnectionStatus('🔴 Disconnected', 'disconnected');
     console.log('❌ Disconnected from server');
+});
+
+socket.on('connect_error', (error) => {
+    console.error('❌ Connection error:', error);
+    updateConnectionStatus('🔴 Connection Error', 'disconnected');
+});
+
+socket.on('error', (error) => {
+    console.error('❌ Socket error:', error);
 });
 
 socket.on('frame_result', (data) => {
@@ -35,7 +61,7 @@ socket.on('error', (data) => {
     alert('Error: ' + data.message);
 });
 
-socket.on('history_clear', () => {
+socket.on('history_cleared', () => {
     console.log('✅ History cleared');
     updateHistoryUI([]);
 });
@@ -137,7 +163,6 @@ async function predictImage() {
         
         // Update UI
         document.getElementById('imageTerrain').textContent = data.terrain;
-        document.getElementById('imageConfidence').textContent = data.confidence;
         document.getElementById('imageDecision').textContent = data.decision;
         document.getElementById('imageDescription').textContent = data.description;
         
@@ -195,7 +220,7 @@ async function predictVideo() {
     }
     
     const statusEl = document.getElementById('videoStatus');
-    statusEl.textContent = '⏳ Processing video (extracting 7 frames)...';
+    statusEl.textContent = '⏳ Analyzing...';
     statusEl.className = 'status analyzing';
     
     try {
@@ -213,28 +238,24 @@ async function predictVideo() {
         
         const data = await response.json();
         
-        // Display results
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        
+        // Display results container
         document.getElementById('videoResultsContainer').style.display = 'block';
-        document.getElementById('videoFinalTerrain').textContent = data.final_terrain || '-';
-        document.getElementById('videoFinalDecision').textContent = data.final_decision || '-';
-        document.getElementById('videoFinalDescription').textContent = data.final_decision_description || '-';
         
         // Display frame results
         const framesContainer = document.getElementById('videoFramesResults');
-        framesContainer.innerHTML = data.frame_predictions.map((frame, idx) => `
+        framesContainer.innerHTML = data.frame_predictions.map((frame) => `
             <div class="glass history-item">
                 <div class="history-header">
-                    <h4>Frame ${frame.part} of 7</h4>
+                    <h4>Frame ${frame.frame_num}</h4>
                 </div>
                 
                 <div class="metric">
                     <span class="label">Terrain:</span>
                     <span class="value terrain-${frame.terrain.toLowerCase().replace(/\s+/g, '-')}">${frame.terrain}</span>
-                </div>
-                
-                <div class="metric">
-                    <span class="label">Confidence:</span>
-                    <span class="value">${frame.confidence}</span>
                 </div>
                 
                 <div class="metric">
@@ -248,7 +269,25 @@ async function predictVideo() {
             </div>
         `).join('');
         
-        statusEl.textContent = '✅ Video Analysis Complete - 7 frames processed';
+        // Add final verdict section
+        const verdictDiv = document.createElement('div');
+        verdictDiv.className = 'glass panel';
+        verdictDiv.style.marginTop = '20px';
+        verdictDiv.innerHTML = `
+            <h3>📊 Final Analysis</h3>
+            <div class="metric">
+                <span class="label">Most Critical Terrain:</span>
+                <span class="value terrain-${data.final_terrain.toLowerCase().replace(/\s+/g, '-')}">${data.final_terrain}</span>
+            </div>
+            <div class="metric">
+                <span class="label">Final Verdict:</span>
+                <span class="value decision-${data.final_decision.replace(/\s+/g, '-').toLowerCase()}">${data.final_decision}</span>
+            </div>
+            <p class="description" style="margin-top: 15px;"><strong>Recommendation:</strong> ${data.final_decision_description}</p>
+        `;
+        framesContainer.parentElement.appendChild(verdictDiv);
+        
+        statusEl.textContent = `✅ Analysis Complete`;
         statusEl.className = 'status success';
         
     } catch (error) {
@@ -261,12 +300,25 @@ async function predictVideo() {
 // ================ LIVE STREAM HANDLING ================
 
 let mediaStream = null;
-let video = document.getElementById('liveVideo');
-let canvas = document.getElementById('captureCanvas');
-let ctx = canvas.getContext('2d');
+let video = null;
+let canvas = null;
+let ctx = null;
 let frameCount = 0;
 let lastFrameTime = Date.now();
 let fps = 0;
+
+// Initialize DOM elements when page loads
+function initializeLiveStreamElements() {
+    if (!video) {
+        video = document.getElementById('liveVideo');
+    }
+    if (!canvas) {
+        canvas = document.getElementById('captureCanvas');
+    }
+    if (!ctx && canvas) {
+        ctx = canvas.getContext('2d');
+    }
+}
 
 async function startLiveStream() {
     if (!isConnected) {
@@ -275,6 +327,18 @@ async function startLiveStream() {
     }
     
     try {
+        // Initialize elements first
+        initializeLiveStreamElements();
+        
+        if (!video || !canvas || !ctx) {
+            throw new Error('elements-not-ready');
+        }
+        
+        // Check if browser supports camera access
+        if (!navigator || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            throw new Error('browser-not-supported');
+        }
+        
         // Request camera access
         mediaStream = await navigator.mediaDevices.getUserMedia({
             video: { 
@@ -299,7 +363,25 @@ async function startLiveStream() {
         
     } catch (error) {
         console.error('Camera error:', error);
-        alert('❌ Cannot access camera: ' + error.message);
+        
+        let userMessage = '❌ Cannot access camera. ';
+        
+        if (error.message === 'browser-not-supported') {
+            userMessage = '❌ Camera access requires a modern browser (Chrome, Firefox, Edge, or Safari).';
+        } else if (error.message === 'elements-not-ready') {
+            userMessage = '❌ Please reload the page and try again.';
+        } else if (error.name === 'NotAllowedError' || error.name === 'PermissionDenied') {
+            userMessage = '❌ Camera access denied. Please allow camera permissions in your browser settings.';
+        } else if (error.name === 'NotFoundError') {
+            userMessage = '❌ No camera device found. Please check your device.';
+        } else if (error.name === 'NotSecureError') {
+            userMessage = '❌ Camera access requires HTTPS. Please access this site over a secure connection.';
+        } else {
+            userMessage = '❌ Cannot access camera. Please ensure HTTPS is enabled and permissions are granted.';
+        }
+        
+        alert(userMessage);
+        isStreamingActive = false;
     }
 }
 
@@ -309,12 +391,18 @@ function stopLiveStream() {
         mediaStream = null;
     }
     
-    video.srcObject = null;
+    if (video) {
+        video.srcObject = null;
+    }
+    
     isStreamingActive = false;
     
     // Reset buttons
-    document.getElementById('startBtn').disabled = false;
-    document.getElementById('stopBtn').disabled = true;
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    
+    if (startBtn) startBtn.disabled = false;
+    if (stopBtn) stopBtn.disabled = true;
     
     console.log('✅ Camera stopped');
 }
@@ -323,6 +411,13 @@ function captureAndProcessFrame() {
     if (!isStreamingActive) return;
     
     try {
+        // Verify elements are available
+        if (!video || !canvas || !ctx) {
+            console.error('Video, canvas, or context is not available');
+            isStreamingActive = false;
+            return;
+        }
+        
         // Draw video frame to canvas
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         
@@ -342,6 +437,7 @@ function captureAndProcessFrame() {
         
     } catch (error) {
         console.error('Frame capture error:', error);
+        isStreamingActive = false;
     }
 }
 
@@ -364,15 +460,12 @@ function displayLiveResult(result) {
     }
     
     const terrain = result.terrain || '-';
-    const confidence = result.confidence || '-';
     const decision = result.decision || '-';
     const description = result.description || '-';
     
     // Update current result display
     document.getElementById('liveTerrain').textContent = terrain;
     document.getElementById('liveTerrain').className = 'value terrain-badge terrain-' + terrain.toLowerCase().replace(/\s+/g, '-');
-    
-    document.getElementById('liveConfidence').textContent = confidence;
     
     document.getElementById('liveDecision').textContent = decision;
     document.getElementById('liveDecision').className = 'value decision-badge decision-' + decision.replace(/\s+/g, '-').toLowerCase();
@@ -418,11 +511,6 @@ function updateHistoryUI(historyData) {
             </div>
             
             <div class="metric">
-                <span class="label">Confidence:</span>
-                <span class="value">${item.confidence}</span>
-            </div>
-            
-            <div class="metric">
                 <span class="label">Decision:</span>
                 <span class="value decision-${item.decision.replace(/\s+/g, '-').toLowerCase()}">${item.decision}</span>
             </div>
@@ -447,9 +535,15 @@ window.addEventListener('load', () => {
     console.log('🚀 OFFROAD AI v2.0 loaded');
     console.log('Waiting for WebSocket connection...');
     
+    // Initialize live stream elements
+    initializeLiveStreamElements();
+    
     // Set button event listeners
-    document.getElementById('startBtn').addEventListener('click', startLiveStream);
-    document.getElementById('stopBtn').addEventListener('click', stopLiveStream);
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    
+    if (startBtn) startBtn.addEventListener('click', startLiveStream);
+    if (stopBtn) stopBtn.addEventListener('click', stopLiveStream);
 });
 
 // ================ ERROR HANDLING ================

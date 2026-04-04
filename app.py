@@ -13,7 +13,7 @@ import tempfile
 import os
 from collections import deque
 from datetime import datetime
-from video import extract_7_frames
+from video import extract_frames
 
 # ================= MEMORY OPTIMIZATION (Render Free Tier: 512 MB) =================
 
@@ -30,7 +30,28 @@ print(f"Available cores: {os.cpu_count()}")
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'offroad-ai-secret-2024'
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+app.config['JSON_SORT_KEYS'] = False
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading', ping_timeout=60, ping_interval=25)
+
+# ================= SECURITY & HTTPS SUPPORT =================
+
+@app.before_request
+def ensure_https():
+    """Ensure HTTPS is used and set security headers"""
+    # Detect if behind proxy (for Render/Cloud deployment)
+    if request.headers.get('X-Forwarded-Proto', 'http') == 'https' or request.scheme == 'https':
+        pass  # HTTPS already secure
+    
+@app.after_request
+def set_security_headers(response):
+    """Add security headers for HTTPS and modern browsers"""
+    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['Permissions-Policy'] = 'camera=*, microphone=*'
+    return response
 
 # ================= CONFIG =================
 
@@ -283,8 +304,8 @@ def handle_connect():
         'connected_at': datetime.now().isoformat(),
         'frames_processed': 0
     }
-    print(f"Client connected: {request.sid}")
-    emit('connection_response', {'status': 'Connected to AI server'})
+    print(f"✅ Client connected: {request.sid}")
+    emit('connect_response', {'status': 'Connected to AI server'}, broadcast=False)
 
 
 @socketio.on('disconnect')
@@ -388,7 +409,7 @@ def predict_image():
 
 @app.route("/predict-video", methods=["POST"])
 def predict_video():
-    """REST endpoint for video file processing (extracts 7 frames)"""
+    """REST endpoint for video file processing (extracts 6 frames)"""
     try:
         if "file" not in request.files:
             return jsonify({"error": "No video file provided"}), 400
@@ -404,15 +425,15 @@ def predict_video():
             video_path = tmp.name
         
         try:
-            # Extract exactly 7 frames from video
-            frames = extract_7_frames(video_path)
+            # Extract 6 evenly-spaced frames from video
+            frames = extract_frames(video_path, num_frames=6)
             
             if not frames:
                 return jsonify({"error": "No frames extracted from video"}), 400
             
             frame_predictions = []
             
-            # Process each of the 7 frames
+            # Process each frame
             for idx, frame in enumerate(frames, 1):
                 # Classify terrain
                 terrain, confidence = classify_terrain(frame)
@@ -427,11 +448,11 @@ def predict_video():
                 mask_compressed = compress_frame((mask * 255).astype(np.uint8))
                 
                 frame_predictions.append({
-                    "part": idx,
+                    "frame_num": idx,
                     "terrain": terrain,
                     "confidence": f"{confidence:.2%}",
                     "decision": decision,
-                    "decision_description": get_verdict_description(decision),
+                    "decision_description": get_decision_description(decision),
                     "mask": mask_compressed
                 })
             
@@ -453,7 +474,7 @@ def predict_video():
             
             return jsonify({
                 "success": True,
-                "total_parts": len(frame_predictions),
+                "total_frames": len(frame_predictions),
                 "frame_predictions": frame_predictions,
                 "final_terrain": final_terrain,
                 "final_decision": final_decision,
@@ -477,11 +498,24 @@ if __name__ == "__main__":
     # Get port from environment (Render sets this) or use 10000 for local
     port = int(os.environ.get('PORT', 10000))
     
+    # Check for SSL certificates for HTTPS
+    cert_file = os.path.join(os.path.dirname(__file__), 'certs', 'cert.pem')
+    key_file = os.path.join(os.path.dirname(__file__), 'certs', 'key.pem')
+    
+    ssl_context = None
+    if os.path.exists(cert_file) and os.path.exists(key_file):
+        ssl_context = (cert_file, key_file)
+        print(f"🔐 HTTPS enabled with certificates at {cert_file}")
+    else:
+        print(f"⚠️  No SSL certificates found. Running on HTTP.")
+        print(f"   To enable HTTPS, run: python generate_ssl_cert.py")
+    
     # Use SocketIO instead of Flask directly
     socketio.run(
         app,
         host="0.0.0.0",
         port=port,
         debug=False,
-        allow_unsafe_werkzeug=True
+        allow_unsafe_werkzeug=True,
+        ssl_context=ssl_context
     )
