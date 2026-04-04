@@ -1,9 +1,13 @@
-torch
-torchvision
+torch==2.0.1
+torchvision==0.15.2
 flask
-flask-cors
+flask-socketio
+python-socketio
+python-engineio
+eventlet
 pillow
 numpy
 opencv-python
 gunicorn
 cryptography
+python-dotenv

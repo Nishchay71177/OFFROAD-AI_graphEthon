@@ -1,303 +1,467 @@
-let imageFile
-let videoFile
+// ================ WEBSOCKET CONNECTION ================
 
-// ============= TAB SWITCHING =============
+const socket = io();
+let isConnected = false;
+let isStreamingActive = false;
+
+socket.on('connect', () => {
+    isConnected = true;
+    updateConnectionStatus('🟢 Connected', 'connected');
+    console.log('✅ Connected to server');
+});
+
+socket.on('disconnect', () => {
+    isConnected = false;
+    updateConnectionStatus('🔴 Disconnected', 'disconnected');
+    console.log('❌ Disconnected from server');
+});
+
+socket.on('frame_result', (data) => {
+    const result = data.result;
+    const history = data.history;
+    const userStats = data.user_stats;
+    
+    if (!result.error) {
+        displayLiveResult(result);
+        updateHistory(history);
+        updateFrameCounter(userStats.frames_processed);
+    } else {
+        console.error('Error:', result.error);
+    }
+});
+
+socket.on('error', (data) => {
+    console.error('WebSocket error:', data.message);
+    alert('Error: ' + data.message);
+});
+
+socket.on('history_clear', () => {
+    console.log('✅ History cleared');
+    updateHistoryUI([]);
+});
+
+// ================ CONNECTION STATUS ================
+
+function updateConnectionStatus(text, status) {
+    const statusEl = document.getElementById('connectionStatus');
+    statusEl.textContent = text;
+    statusEl.className = 'connection-status ' + status;
+}
+
+// ================ TAB SWITCHING ================
 
 function switchTab(tabName) {
-  const tabs = document.querySelectorAll('.tab-content')
-  const buttons = document.querySelectorAll('.tab-btn')
-  
-  tabs.forEach(tab => tab.classList.remove('active'))
-  buttons.forEach(btn => btn.classList.remove('active'))
-  
-  document.getElementById(tabName + '-tab').classList.add('active')
-  event.target.classList.add('active')
+    // Hide all tabs
+    const tabs = document.querySelectorAll('.tab-content');
+    tabs.forEach(tab => tab.classList.remove('active'));
+    
+    // Remove active class from buttons
+    const buttons = document.querySelectorAll('.tab-btn');
+    buttons.forEach(btn => btn.classList.remove('active'));
+    
+    // Show selected tab
+    const selectedTab = document.getElementById(tabName + '-tab');
+    if (selectedTab) {
+        selectedTab.classList.add('active');
+    }
+    
+    // Mark button as active
+    event.target?.classList.add('active');
 }
 
-// ============= IMAGE UPLOAD =============
+// ================ IMAGE UPLOAD & ANALYSIS ================
 
-const dropZone = document.getElementById("dropZone")
-const input = document.getElementById("fileInput")
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+let selectedImageFile = null;
 
-dropZone.onclick = () => input.click()
+dropZone.addEventListener('click', () => fileInput.click());
 
-input.onchange = e => {
-  imageFile = e.target.files[0]
-  previewImage(imageFile)
-}
+fileInput.addEventListener('change', (e) => {
+    selectedImageFile = e.target.files[0];
+    if (selectedImageFile) {
+        previewImage(selectedImageFile);
+    }
+});
 
-dropZone.ondragover = e => {
-  e.preventDefault()
-  dropZone.style.background = "rgba(56,189,248,0.15)"
-}
+dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.style.background = 'rgba(56,189,248,0.15)';
+});
 
-dropZone.ondragleave = () => {
-  dropZone.style.background = ""
-}
+dropZone.addEventListener('dragleave', () => {
+    dropZone.style.background = '';
+});
 
-dropZone.ondrop = e => {
-  e.preventDefault()
-  dropZone.style.background = ""
-  imageFile = e.dataTransfer.files[0]
-  previewImage(imageFile)
-}
+dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.style.background = '';
+    selectedImageFile = e.dataTransfer.files[0];
+    if (selectedImageFile) {
+        previewImage(selectedImageFile);
+    }
+});
 
 function previewImage(file) {
-  let reader = new FileReader()
-  reader.onload = e => {
-    document.getElementById("preview").src = e.target.result
-  }
-  reader.readAsDataURL(file)
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        document.getElementById('preview').src = e.target.result;
+    };
+    reader.readAsDataURL(file);
 }
 
 async function predictImage() {
-  let formData = new FormData()
-  formData.append("file", imageFile)
-
-  document.getElementById("decision").innerHTML = "Analyzing..."
-
-  let res = await fetch("/predict-image", {
-    method: "POST",
-    body: formData
-  })
-
-  let data = await res.json()
-
-  document.getElementById("terrain").innerHTML =
-    "Terrain: " + data.terrain
-
-  document.getElementById("decision").innerHTML =
-    "Navigation: " + data.decision
-
-  document.getElementById("maskPreview").src =
-    "data:image/png;base64," + data.mask
-}
-
-// ============= VIDEO UPLOAD =============
-
-const dropZoneVideo = document.getElementById("dropZoneVideo")
-const inputVideo = document.getElementById("fileInputVideo")
-
-dropZoneVideo.onclick = () => inputVideo.click()
-
-inputVideo.onchange = e => {
-  videoFile = e.target.files[0]
-  previewVideoInfo(videoFile)
-}
-
-dropZoneVideo.ondragover = e => {
-  e.preventDefault()
-  dropZoneVideo.style.background = "rgba(56,189,248,0.15)"
-}
-
-dropZoneVideo.ondragleave = () => {
-  dropZoneVideo.style.background = ""
-}
-
-dropZoneVideo.ondrop = e => {
-  e.preventDefault()
-  dropZoneVideo.style.background = ""
-  videoFile = e.dataTransfer.files[0]
-  previewVideoInfo(videoFile)
-}
-
-function previewVideoInfo(file) {
-  const sizeMB = (file.size / (1024 * 1024)).toFixed(2)
-  document.getElementById("videoInfo").innerHTML = 
-    `<strong>Video File:</strong> ${file.name}<br><strong>Size:</strong> ${sizeMB} MB`
-}
-
-// Extract frames
-function extractVideoFrames(videoFile) {
-  return new Promise((resolve, reject) => {
-    const video = document.createElement('video')
-    video.src = URL.createObjectURL(videoFile)
-
-    video.onloadedmetadata = () => {
-      const frames = []
-      let i = 0
-
-      function grab() {
-        if (i >= 5) return resolve(frames)
-
-        video.currentTime = (video.duration / 5) * i
-      }
-
-      video.onseeked = () => {
-        const canvas = document.createElement('canvas')
-        canvas.width = video.videoWidth
-        canvas.height = video.videoHeight
-        canvas.getContext('2d').drawImage(video, 0, 0)
-
-        canvas.toBlob(blob => {
-          frames.push(blob)
-          i++
-          grab()
-        })
-      }
-
-      grab()
+    if (!selectedImageFile) {
+        alert('Please select an image first');
+        return;
     }
-  })
+    
+    const statusEl = document.getElementById('imageStatus');
+    statusEl.textContent = '⏳ Analyzing...';
+    statusEl.className = 'status analyzing';
+    
+    try {
+        const formData = new FormData();
+        formData.append('file', selectedImageFile);
+        
+        const response = await fetch('/predict-image', {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (!response.ok) {
+            throw new Error('Analysis failed');
+        }
+        
+        const data = await response.json();
+        
+        // Update UI
+        document.getElementById('imageTerrain').textContent = data.terrain;
+        document.getElementById('imageConfidence').textContent = data.confidence;
+        document.getElementById('imageDecision').textContent = data.decision;
+        document.getElementById('imageDescription').textContent = data.description;
+        
+        if (data.mask) {
+            document.getElementById('maskPreview').src = 'data:image/jpeg;base64,' + data.mask;
+        }
+        
+        statusEl.textContent = '✅ Analysis Complete';
+        statusEl.className = 'status success';
+        
+    } catch (error) {
+        console.error('Error:', error);
+        statusEl.textContent = '❌ Error: ' + error.message;
+        statusEl.className = 'status error';
+    }
 }
+
+// ================ VIDEO UPLOAD & ANALYSIS ================
+
+const dropZoneVideo = document.getElementById('dropZoneVideo');
+const fileInputVideo = document.getElementById('fileInputVideo');
+let selectedVideoFile = null;
+
+dropZoneVideo.addEventListener('click', () => fileInputVideo.click());
+
+fileInputVideo.addEventListener('change', (e) => {
+    selectedVideoFile = e.target.files[0];
+    if (selectedVideoFile) {
+        console.log('✅ Video selected:', selectedVideoFile.name);
+    }
+});
+
+dropZoneVideo.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZoneVideo.style.background = 'rgba(56,189,248,0.15)';
+});
+
+dropZoneVideo.addEventListener('dragleave', () => {
+    dropZoneVideo.style.background = '';
+});
+
+dropZoneVideo.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZoneVideo.style.background = '';
+    selectedVideoFile = e.dataTransfer.files[0];
+    if (selectedVideoFile) {
+        console.log('✅ Video selected:', selectedVideoFile.name);
+    }
+});
 
 async function predictVideo() {
-  if (!videoFile) {
-    alert("Please select a video file first")
-    return
-  }
-
-  let formData = new FormData()
-  formData.append("file", videoFile)
-
-  document.getElementById("videoResultsContainer").style.display = "block"
-  document.getElementById("videoFramesResults").innerHTML = "<p style='text-align:center; padding:20px;'>Processing video...</p>"
-  document.getElementById("videoFinalDecision").innerHTML = ""
-
-  try {
-    const res = await fetch("/predict-video", {
-      method: "POST",
-      body: formData
-    })
-
-    const data = await res.json()
-
-    if (!data.success) {
-      alert("Error: " + data.error)
-      return
+    if (!selectedVideoFile) {
+        alert('Please select a video first');
+        return;
     }
-
-    // Display analysis results
-    let html = ""
-    if (data.frame_predictions && data.frame_predictions.length > 0) {
-      data.frame_predictions.forEach((frame, index) => {
-        html += `
-          <div style="border: 1px solid rgba(56,189,248,0.3); border-radius: 8px; padding: 15px; background: rgba(30,41,59,0.6);">
-            <h4 style="margin-top: 0; margin-bottom: 10px; color: #38bdf8;">Sample ${index + 1}</h4>
-            <p style="margin: 8px 0; font-size: 13px;"><strong>Terrain Type:</strong> ${frame.terrain}</p>
-            <p style="margin: 8px 0; font-size: 13px;"><strong>Recommendation:</strong> ${frame.decision}</p>
-            <p style="margin: 8px 0; font-size: 12px; color: #94a3b8; font-style: italic;">${frame.decision_description}</p>
-            <div style="margin-top: 10px;">
-              <p style="margin: 5px 0; font-size: 11px; color: #64748b;">Segmentation Mask:</p>
-              <img src="data:image/png;base64,${frame.mask}" style="width: 100%; border-radius: 6px; border: 1px solid rgba(56,189,248,0.2);">
-            </div>
-          </div>
-        `
-      })
-    }
-
-    document.getElementById("videoFramesResults").innerHTML = html
-
-    // Display final verdict
-    document.getElementById("videoFinalDecision").innerHTML = `
-      <div style="background: linear-gradient(135deg, rgba(34,197,94,0.1), rgba(56,189,248,0.1)); padding: 20px; border-radius: 8px; border-left: 4px solid #38bdf8; margin-top: 20px;">
-        <h3 style="margin-top: 0; margin-bottom: 15px; color: #38bdf8;">Video Analysis Summary</h3>
-        <p style="margin: 8px 0; font-size: 13px;">Most Critical Terrain: <strong>${data.final_terrain}</strong></p>
-        <div style="background: rgba(34,197,94,0.1); padding: 12px; border-radius: 6px; margin-top: 12px; border: 1px solid rgba(34,197,94,0.3);">
-          <p style="margin: 5px 0; font-size: 14px; font-weight: bold; color: #22c55e;">FINAL VERDICT: ${data.final_decision}</p>
-          <p style="margin: 8px 0; font-size: 12px; color: #86efac;">${data.final_decision_description}</p>
-        </div>
-      </div>
-    `
-  } catch (error) {
-    alert("Error processing video: " + error.message)
-  }
-}
-
-// ============= LIVE =============
-
-let liveStream = null
-let analysisRunning = false
-let frameCount = 0
-
-async function startLiveAnalysis() {
-  try {
-    liveStream = await navigator.mediaDevices.getUserMedia({ 
-      video: { width: { ideal: 640 }, height: { ideal: 480 } },
-      audio: false 
-    })
     
-    const video = document.getElementById("liveVideo")
-    video.srcObject = liveStream
-
-    document.getElementById("liveVideoContainer").style.display = "block"
-    document.getElementById("liveResultsContainer").style.display = "block"
-    document.getElementById("startBtn").style.display = "none"
-    document.getElementById("stopBtn").style.display = "inline-block"
-
-    analysisRunning = true
-    frameCount = 0
-    console.log("Live analysis started")
-    analysisLoop()
-  } catch (error) {
-    alert("Camera access denied: " + error.message)
-  }
+    const statusEl = document.getElementById('videoStatus');
+    statusEl.textContent = '⏳ Processing video (extracting 7 frames)...';
+    statusEl.className = 'status analyzing';
+    
+    try {
+        const formData = new FormData();
+        formData.append('file', selectedVideoFile);
+        
+        const response = await fetch('/predict-video', {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (!response.ok) {
+            throw new Error('Video analysis failed');
+        }
+        
+        const data = await response.json();
+        
+        // Display results
+        document.getElementById('videoResultsContainer').style.display = 'block';
+        document.getElementById('videoFinalTerrain').textContent = data.final_terrain || '-';
+        document.getElementById('videoFinalDecision').textContent = data.final_decision || '-';
+        document.getElementById('videoFinalDescription').textContent = data.final_decision_description || '-';
+        
+        // Display frame results
+        const framesContainer = document.getElementById('videoFramesResults');
+        framesContainer.innerHTML = data.frame_predictions.map((frame, idx) => `
+            <div class="glass history-item">
+                <div class="history-header">
+                    <h4>Frame ${frame.part} of 7</h4>
+                </div>
+                
+                <div class="metric">
+                    <span class="label">Terrain:</span>
+                    <span class="value terrain-${frame.terrain.toLowerCase().replace(/\s+/g, '-')}">${frame.terrain}</span>
+                </div>
+                
+                <div class="metric">
+                    <span class="label">Confidence:</span>
+                    <span class="value">${frame.confidence}</span>
+                </div>
+                
+                <div class="metric">
+                    <span class="label">Decision:</span>
+                    <span class="value decision-${frame.decision.replace(/\s+/g, '-').toLowerCase()}">${frame.decision}</span>
+                </div>
+                
+                <p class="description">${frame.decision_description}</p>
+                
+                ${frame.mask ? `<img src="data:image/jpeg;base64,${frame.mask}" alt="Mask" style="width: 100%; border-radius: 5px; margin-top: 10px;">` : ''}
+            </div>
+        `).join('');
+        
+        statusEl.textContent = '✅ Video Analysis Complete - 7 frames processed';
+        statusEl.className = 'status success';
+        
+    } catch (error) {
+        console.error('Error:', error);
+        statusEl.textContent = '❌ Error: ' + error.message;
+        statusEl.className = 'status error';
+    }
 }
 
-function stopLiveAnalysis() {
-  analysisRunning = false
-  if (liveStream) {
-    liveStream.getTracks().forEach(t => t.stop())
-  }
-  
-  document.getElementById("liveVideoContainer").style.display = "none"
-  document.getElementById("liveResultsContainer").style.display = "none"
-  document.getElementById("startBtn").style.display = "inline-block"
-  document.getElementById("stopBtn").style.display = "none"
-  
-  document.getElementById("liveTerrainType").innerHTML = ""
-  document.getElementById("liveDecision").innerHTML = ""
-  document.getElementById("liveMaskCapture").src = ""
-  
-  console.log("Live analysis stopped")
+// ================ LIVE STREAM HANDLING ================
+
+let mediaStream = null;
+let video = document.getElementById('liveVideo');
+let canvas = document.getElementById('captureCanvas');
+let ctx = canvas.getContext('2d');
+let frameCount = 0;
+let lastFrameTime = Date.now();
+let fps = 0;
+
+async function startLiveStream() {
+    if (!isConnected) {
+        alert('Not connected to server. Please wait...');
+        return;
+    }
+    
+    try {
+        // Request camera access
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+            video: { 
+                width: { ideal: 640 },
+                height: { ideal: 480 },
+                facingMode: 'environment'
+            }
+        });
+        
+        video.srcObject = mediaStream;
+        video.play();
+        
+        // Enable/disable buttons
+        document.getElementById('startBtn').disabled = true;
+        document.getElementById('stopBtn').disabled = false;
+        
+        isStreamingActive = true;
+        console.log('✅ Camera started');
+        
+        // Start capturing frames
+        captureAndProcessFrame();
+        
+    } catch (error) {
+        console.error('Camera error:', error);
+        alert('❌ Cannot access camera: ' + error.message);
+    }
 }
 
-async function analysisLoop() {
-  if (!analysisRunning) return
-
-  try {
-    const video = document.getElementById("liveVideo")
-
-    const canvas = document.createElement('canvas')
-    canvas.width = video.videoWidth
-    canvas.height = video.videoHeight
-    canvas.getContext('2d').drawImage(video, 0, 0)
-
-    // Show analyzing status
-    document.getElementById("liveTerrainType").innerHTML = "Analyzing..."
-    document.getElementById("liveDecision").innerHTML = ""
-
-    const blob = await new Promise(resolve => {
-      canvas.toBlob(resolve, 'image/jpeg', 0.85)
-    })
-
-    const fd = new FormData()
-    fd.append("file", blob)
-
-    const res = await fetch("/predict-image", {
-      method: "POST",
-      body: fd
-    })
-
-    if (!res.ok) throw new Error("API error")
-
-    const data = await res.json()
-
-    console.log(`Frame ${frameCount}: ${data.terrain} - ${data.decision}`)
-
-    // Display results immediately
-    document.getElementById("liveTerrainType").innerHTML = `Terrain: ${data.terrain}`
-    document.getElementById("liveDecision").innerHTML = `Decision: ${data.decision}`
-    document.getElementById("liveMaskCapture").src = "data:image/png;base64," + data.mask
-    document.getElementById("liveFrameCapture").src = canvas.toDataURL('image/jpeg')
-
-  } catch (error) {
-    console.error("Error:", error)
-    document.getElementById("liveTerrainType").innerHTML = "Error: " + error.message
-  }
-
-  // Continue loop - 1.5s between frames
-  if (analysisRunning) {
-    setTimeout(analysisLoop, 1500)
-  }
+function stopLiveStream() {
+    if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop());
+        mediaStream = null;
+    }
+    
+    video.srcObject = null;
+    isStreamingActive = false;
+    
+    // Reset buttons
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('stopBtn').disabled = true;
+    
+    console.log('✅ Camera stopped');
 }
+
+function captureAndProcessFrame() {
+    if (!isStreamingActive) return;
+    
+    try {
+        // Draw video frame to canvas
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        // Convert to JPEG base64 (lightweight)
+        const frameBase64 = canvas.toDataURL('image/jpeg', 0.7); // 70% quality for compression
+        
+        // Send to server via WebSocket
+        socket.emit('process_frame', {
+            frame: frameBase64
+        });
+        
+        frameCount++;
+        updateFPS();
+        
+        // Capture next frame after short delay
+        setTimeout(captureAndProcessFrame, 300); // ~3 FPS for consistency
+        
+    } catch (error) {
+        console.error('Frame capture error:', error);
+    }
+}
+
+function updateFPS() {
+    const now = Date.now();
+    if (now - lastFrameTime >= 1000) {
+        fps = frameCount;
+        frameCount = 0;
+        lastFrameTime = now;
+        document.getElementById('fpsCounter').textContent = fps;
+    }
+}
+
+// ================ LIVE RESULT DISPLAY ================
+
+function displayLiveResult(result) {
+    if (result.error) {
+        console.error('Processing error:', result.error);
+        return;
+    }
+    
+    const terrain = result.terrain || '-';
+    const confidence = result.confidence || '-';
+    const decision = result.decision || '-';
+    const description = result.description || '-';
+    
+    // Update current result display
+    document.getElementById('liveTerrain').textContent = terrain;
+    document.getElementById('liveTerrain').className = 'value terrain-badge terrain-' + terrain.toLowerCase().replace(/\s+/g, '-');
+    
+    document.getElementById('liveConfidence').textContent = confidence;
+    
+    document.getElementById('liveDecision').textContent = decision;
+    document.getElementById('liveDecision').className = 'value decision-badge decision-' + decision.replace(/\s+/g, '-').toLowerCase();
+    
+    document.getElementById('liveDescription').textContent = description;
+    
+    // Display segmentation mask if available
+    if (result.mask) {
+        document.getElementById('liveMaskPreview').src = 'data:image/jpeg;base64,' + result.mask;
+    }
+}
+
+// ================ FRAME COUNTER ================
+
+function updateFrameCounter(count) {
+    document.getElementById('frameCounter').textContent = count;
+}
+
+// ================ HISTORY MANAGEMENT ================
+
+function updateHistory(historyData) {
+    updateHistoryUI(historyData);
+}
+
+function updateHistoryUI(historyData) {
+    const container = document.getElementById('historyContainer');
+    
+    if (!historyData || historyData.length === 0) {
+        container.innerHTML = '<p class="text-center">No results yet</p>';
+        return;
+    }
+    
+    container.innerHTML = historyData.map((item, idx) => `
+        <div class="glass history-item">
+            <div class="history-header">
+                <h4>Result #${idx + 1}</h4>
+                <small>${new Date(item.timestamp).toLocaleTimeString()}</small>
+            </div>
+            
+            <div class="metric">
+                <span class="label">Terrain:</span>
+                <span class="value terrain-${item.terrain.toLowerCase().replace(/\s+/g, '-')}">${item.terrain}</span>
+            </div>
+            
+            <div class="metric">
+                <span class="label">Confidence:</span>
+                <span class="value">${item.confidence}</span>
+            </div>
+            
+            <div class="metric">
+                <span class="label">Decision:</span>
+                <span class="value decision-${item.decision.replace(/\s+/g, '-').toLowerCase()}">${item.decision}</span>
+            </div>
+            
+            <p class="description">${item.description}</p>
+            
+            ${item.mask ? `<img src="data:image/jpeg;base64,${item.mask}" alt="Mask" style="width: 100%; border-radius: 5px; margin-top: 10px;">` : ''}
+        </div>
+    `).join('');
+}
+
+function clearHistory() {
+    if (confirm('Clear all history?')) {
+        socket.emit('clear_history');
+        updateHistoryUI([]);
+    }
+}
+
+// ================ INITIALIZATION ================
+
+window.addEventListener('load', () => {
+    console.log('🚀 OFFROAD AI v2.0 loaded');
+    console.log('Waiting for WebSocket connection...');
+    
+    // Set button event listeners
+    document.getElementById('startBtn').addEventListener('click', startLiveStream);
+    document.getElementById('stopBtn').addEventListener('click', stopLiveStream);
+});
+
+// ================ ERROR HANDLING ================
+
+window.addEventListener('error', (event) => {
+    console.error('Global error:', event.error);
+});
+
+// ================ CLEANUP ================
+
+window.addEventListener('beforeunload', () => {
+    if (isStreamingActive) {
+        stopLiveStream();
+    }
+});

@@ -1,159 +1,161 @@
 <!DOCTYPE html>
-
-<html>
-
+<html lang="en">
 <head>
-
-<title>Offroad AI</title>
-
-<link rel="stylesheet" href="/static/style.css">
-
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OFFROAD AI - Terrain Analysis</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
-
 <body>
+    <div class="container">
+        <header>
+            <h1>OFFROAD NAVIGATION AI</h1>
+            <p>Real-time Terrain Classification & Navigation Guidance</p>
+        </header>
 
-<h1>Offroad Navigation Intelligence</h1>
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('image')">Image</button>
+            <button class="tab-btn" onclick="switchTab('video')">Video</button>
+            <button class="tab-btn" onclick="switchTab('live')">Live Stream</button>
+            <button class="tab-btn" onclick="switchTab('history')">History</button>
+        </div>
 
-<div class="tabs">
-  <button class="tab-btn active" onclick="switchTab('image')">Image Analysis</button>
-  <button class="tab-btn" onclick="switchTab('video')">Video Analysis</button>
-  <button class="tab-btn" onclick="switchTab('live')">Live Analysis</button>
-</div>
+        <!-- ============= IMAGE TAB ============= -->
+        <div id="image-tab" class="tab-content active">
+            <div class="glass panel">
+                <h2>Upload Terrain Image</h2>
+                <div class="drop-zone" id="dropZone">
+                    <p>Drag & Drop Image or Click</p>
+                    <input type="file" id="fileInput" accept="image/*">
+                </div>
+                <button class="btn btn-primary" onclick="predictImage()">Analyze Image</button>
+                <p id="imageStatus" class="status"></p>
+            </div>
 
-<div id="image-tab" class="tab-content active">
-<div class="glass">
+            <div class="glass results-panel">
+                <div class="result-item">
+                    <h3>Input Image</h3>
+                    <img id="preview" alt="Preview">
+                </div>
+                <div class="result-item">
+                    <h3>Segmentation Mask</h3>
+                    <img id="maskPreview" alt="Mask">
+                </div>
+                <div class="result-item">
+                    <h3>Analysis Result</h3>
+                    <div class="metric">
+                        <span class="label">Terrain:</span>
+                        <span id="imageTerrain" class="value">-</span>
+                    </div>
+                    <div class="metric">
+                        <span class="label">Confidence:</span>
+                        <span id="imageConfidence" class="value">-</span>
+                    </div>
+                    <div class="metric">
+                        <span class="label">Decision:</span>
+                        <span id="imageDecision" class="value">-</span>
+                    </div>
+                    <p id="imageDescription" class="description"></p>
+                </div>
+            </div>
+        </div>
 
-<h2>Upload Terrain Image</h2>
+        <!-- ============= VIDEO TAB ============= -->
+        <div id="video-tab" class="tab-content">
+            <div class="glass panel">
+                <h2>Upload Terrain Video</h2>
+                <div class="drop-zone" id="dropZoneVideo">
+                    <p>Drag & Drop Video or Click</p>
+                    <input type="file" id="fileInputVideo" accept="video/*">
+                </div>
+                <button class="btn btn-primary" onclick="predictVideo()">Analyze Video (7 Frames)</button>
+                <p id="videoStatus" class="status"></p>
+            </div>
 
-<div class="drop-zone" id="dropZone">
+            <div class="glass results-panel" id="videoResultsContainer" style="display:none;">
+                <h2>Video Analysis Results</h2>
+                <div id="videoFramesResults" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:20px; margin-top:20px;"></div>
+            </div>
 
-<p>Drag & Drop Image</p>
+            <div class="glass panel">
+                <h3>Final Video Decision</h3>
+                <div class="metric">
+                    <span class="label">Overall Terrain:</span>
+                    <span id="videoFinalTerrain" class="value">-</span>
+                </div>
+                <div class="metric">
+                    <span class="label">Final Decision:</span>
+                    <span id="videoFinalDecision" class="value">-</span>
+                </div>
+                <p id="videoFinalDescription" class="description"></p>
+            </div>
+        </div>
 
-<input type="file" id="fileInput" accept="image/*">
+        <!-- ============= LIVE STREAM TAB ============= -->
+        <div id="live-tab" class="tab-content">
+            <div class="glass panel">
+                <h2>Live Camera Feed</h2>
+                <div class="camera-container">
+                    <video id="liveVideo" autoplay playsinline muted width="640" height="480"></video>
+                    <canvas id="captureCanvas" style="display: none;" width="640" height="480"></canvas>
+                </div>
+                
+                <div class="controls">
+                    <button class="btn btn-success" id="startBtn" onclick="startLiveStream()">Start Stream</button>
+                    <button class="btn btn-danger" id="stopBtn" onclick="stopLiveStream()" disabled>Stop Stream</button>
+                    <div class="fps-display">
+                        <span>FPS: <span id="fpsCounter">0</span></span>
+                        <span>Frames: <span id="frameCounter">0</span></span>
+                    </div>
+                </div>
+            </div>
 
-</div>
+            <!-- LIVE RESULTS -->
+            <div class="glass results-panel">
+                <h2>Live Results</h2>
+                <div class="live-result">
+                    <div class="result-item">
+                        <h3>Current Frame</h3>
+                        <img id="liveFramePreview" alt="Current frame" width="300">
+                    </div>
+                    <div class="result-item">
+                        <h3>Analysis</h3>
+                        <div class="metric">
+                            <span class="label">Terrain:</span>
+                            <span id="liveTerrain" class="value terrain-badge">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="label">Confidence:</span>
+                            <span id="liveConfidence" class="value">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="label">Decision:</span>
+                            <span id="liveDecision" class="value decision-badge">-</span>
+                        </div>
+                        <p id="liveDescription" class="description"></p>
+                    </div>
+                    <div class="result-item">
+        <!-- ============= HISTORY TAB ============= -->
+        <div id="history-tab" class="tab-content">
+            <div class="glass panel">
+                <h2>Last 3 Results</h2>
+                <button class="btn btn-secondary" onclick="clearHistory()">Clear History</button>
+            </div>
 
-<button onclick="predictImage()">Analyze Terrain</button>
+            <div id="historyContainer" class="history-grid">
+                <p class="text-center">No results yet</p>
+            </div>
+        </div>
+    </div>
 
-</div>
+    <footer>
+        <p>OFFROAD AI v2.0 | WebSocket-based Real-time Analysis</p>
+        <p id="connectionStatus" class="connection-status">Disconnected</p>
+    </footer>
 
-
-<div class="glass results">
-
-<div>
-
-<h3>Input Image</h3>
-
-<img id="preview">
-
-</div>
-
-<div>
-
-<h3>Segmentation Mask</h3>
-
-<img id="maskPreview">
-
-</div>
-
-</div>
-
-
-<div class="glass metrics">
-
-<p id="terrain"></p>
-
-<p id="decision"></p>
-
-</div>
-</div>
-
-<div id="video-tab" class="tab-content">
-<div class="glass">
-
-<h2>Upload Terrain Video</h2>
-
-<div class="drop-zone" id="dropZoneVideo">
-
-<p>Drag & Drop Video</p>
-
-<input type="file" id="fileInputVideo" accept="video/*">
-
-</div>
-
-<button onclick="predictVideo()">Analyze Video</button>
-
-<p id="videoInfo"></p>
-
-</div>
-
-<div class="glass results" id="videoResultsContainer" style="display:none;">
-
-<h3>Video Analysis Results</h3>
-
-<div id="videoFramesResults" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(350px, 1fr)); gap:20px;"></div>
-
-</div>
-
-<div class="glass metrics">
-
-<p id="videoDecisions"></p>
-
-<p id="videoFinalDecision"></p>
-
-</div>
-</div>
-
-<div id="live-tab" class="tab-content">
-<div class="glass">
-
-<h2>Live Terrain Analysis</h2>
-
-<p style="font-size: 14px; color: #38bdf8;">Real-time analysis using your webcam</p>
-
-<div style="margin: 20px 0;">
-<button onclick="startLiveAnalysis()" id="startBtn">📹 Start Live Stream</button>
-<button onclick="stopLiveAnalysis()" id="stopBtn" style="display:none;">⏹️ Stop Stream</button>
-</div>
-
-<div id="liveVideoContainer" style="display:none; text-align:center;">
-<video id="liveVideo" style="width:100%; max-width:500px; border-radius:10px; background:black; margin:10px 0;"></video>
-</div>
-
-</div>
-
-<div class="glass results" id="liveResultsContainer" style="display:none;">
-
-<h3>Live Analysis</h3>
-
-<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:20px;">
-
-<div style="border:1px solid rgba(255,255,255,0.2); padding:15px; border-radius:10px;">
-<h4>Live Feed</h4>
-<img id="liveFrameCapture" style="width:100%; border-radius:8px; background:black;">
-</div>
-
-<div style="border:1px solid rgba(255,255,255,0.2); padding:15px; border-radius:10px;">
-<h4>Segmentation Mask</h4>
-<img id="liveMaskCapture" style="width:100%; border-radius:8px; background:black;">
-</div>
-
-</div>
-
-</div>
-
-<div class="glass results" id="previousResultsContainer" style="display:none; padding: 20px;">
-<h3>Last 3 Frames History</h3>
-<div id="previousResultsList" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(250px, 1fr)); gap:15px;"></div>
-</div>
-
-<div class="glass metrics">
-
-<p id="liveTerrainType"></p>
-<p id="liveDecision"></p>
-<p id="liveFrameCount" style="font-size: 12px; color: #94a3b8;"></p>
-
-</div>
+    <script src="/static/script.js"></script>
+</body></div>
 
 </div>
 

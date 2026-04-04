@@ -1,11 +1,11 @@
 @echo off
-REM Windows startup script for Offroad AI Web App
+REM Windows startup script for Offroad AI Web App v2.0 (WebSocket)
 
 echo.
-echo ╔════════════════════════════════════════╗
-echo ║   Offroad AI - Terrain Segmentation     ║
-echo ║          Starting Flask App...          ║
-echo ╚════════════════════════════════════════╝
+echo ╔════════════════════════════════════════════════════╗
+echo ║   OFFROAD AI v2.0 - WebSocket Live Streaming       ║
+echo ║          Starting Application Server...             ║
+echo ╚════════════════════════════════════════════════════╝
 echo.
 
 REM Check if Python is installed
@@ -36,11 +36,17 @@ REM Install/upgrade dependencies
 echo Installing dependencies...
 python -m pip install -r requirements.txt --quiet
 
-REM Run the Flask app
+REM Run the Flask-SocketIO app
 echo.
-echo ✓ Starting Flask server...
+echo ✓ Starting WebSocket Server...
 echo.
 echo 🌐 Open your browser and go to: http://localhost:10000
+echo.
+echo Features:
+echo   - Real-time WebSocket video streaming
+echo   - Frame-by-frame terrain classification
+echo   - Last 3 results history
+echo   - Lightweight frame compression
 echo.
 echo Press Ctrl+C to stop the server
 echo.
@@ -48,6 +54,12 @@ echo.
 python app.py
 
 if errorlevel 1 (
+    echo.
+    echo ❌ ERROR: Server failed to start
+    echo Please check the error message above
+    pause
+    exit /b 1
+)
     echo.
     echo ERROR: Flask app failed to start
     pause
